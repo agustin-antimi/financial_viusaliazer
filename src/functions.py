@@ -1,7 +1,7 @@
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 def _init_ticker(ticker_name: str) -> yf.Ticker:
     """Initializes a yfinance Ticker object.
@@ -118,24 +118,24 @@ def _format_for_lightweight_charts(df: pd.DataFrame) -> pd.DataFrame:
         print(f"Error formatting data for lightweight-charts: {e}")
         return pd.DataFrame()
     
-    def fetch_sp500_tickers() -> List[str]:
-        """Fetches the list of S&P 500 ticker symbols from Wikipedia.
-        Returns:
-            List[str]: A list containing the ticker symbols of the S&P 500 companies.
-        """
-        url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-        
-        # pandas.read_html parses all HTML tables on the page into a list of DataFrames
-        tables = pd.read_html(url)
-        
-        # The first table contains the S&P 500 constituents
-        sp500_table = tables[0]
-        
-        # Extract the 'Symbol' column as a list
-        tickers = sp500_table['Symbol'].tolist()
-        
-        # Note: Wikipedia sometimes uses dots in symbols (e.g., 'BRK.B'), 
-        # but yfinance expects hyphens ('BRK-B'). We must clean this up.
-        clean_tickers = [ticker.replace('.', '-') for ticker in tickers]
-        
-        return clean_tickers
+def fetch_sp500_tickers() -> List[str]:
+    """Fetches the list of S&P 500 ticker symbols from Wikipedia.
+    Returns:
+        List[str]: A list containing the ticker symbols of the S&P 500 companies.
+    """
+    url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+    
+    # pandas.read_html parses all HTML tables on the page into a list of DataFrames
+    tables = pd.read_html(url)
+    
+    # The first table contains the S&P 500 constituents
+    sp500_table = tables[0]
+    
+    # Extract the 'Symbol' column as a list
+    tickers = sp500_table['Symbol'].tolist()
+    
+    # Note: Wikipedia sometimes uses dots in symbols (e.g., 'BRK.B'), 
+    # but yfinance expects hyphens ('BRK-B'). We must clean this up.
+    clean_tickers = [ticker.replace('.', '-') for ticker in tickers]
+    
+    return clean_tickers
