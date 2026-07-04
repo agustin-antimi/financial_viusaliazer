@@ -1,7 +1,8 @@
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Union
+from lightweight_charts import Chart, JupyterChart
 
 def _init_ticker(ticker_name: str) -> yf.Ticker:
     """Initializes a yfinance Ticker object.
@@ -91,14 +92,18 @@ def _format_for_lightweight_charts(df: pd.DataFrame) -> pd.DataFrame:
         df (pd.DataFrame): Raw historical data from yfinance.
         
     Returns:
-        pd.DataFrame: Formatted DataFrame with required columns and timezone-naive dates.
+        pd.DataFrame: Formatted DataFrame with required columns and ns resolution.
     """
     if df is None or df.empty:
         return pd.DataFrame()
         
     try:
-        # Create a copy to prevent modifying the original dataframe
         formatted_df = df.copy().reset_index()
+        
+        # Flatten MultiIndex columns if they exist (common in newer yfinance versions)
+        if isinstance(formatted_df.columns, pd.MultiIndex):
+            formatted_df.columns = formatted_df.columns.get_level_values(0)
+            
         formatted_df.columns = formatted_df.columns.str.lower()
         
         if 'date' in formatted_df.columns:
@@ -107,7 +112,13 @@ def _format_for_lightweight_charts(df: pd.DataFrame) -> pd.DataFrame:
             formatted_df = formatted_df.rename(columns={'datetime': 'time'})
             
         if 'time' in formatted_df.columns:
-            formatted_df['time'] = pd.to_datetime(formatted_df['time']).dt.tz_localize(None)
+            # BUGFIX: Force resolution to nanoseconds [ns] to prevent the 
+            # timestamp scaling bug in lightweight-charts-python with pandas 2.0+
+            formatted_df['time'] = (
+                pd.to_datetime(formatted_df['time'])
+                .dt.tz_localize(None)
+                .astype('datetime64[ns]')
+            )
         
         desired_columns = ['time', 'open', 'high', 'low', 'close', 'volume']
         final_columns = [col for col in desired_columns if col in formatted_df.columns]
@@ -147,3 +158,57 @@ def fetch_sp500_tickers() -> List[str]:
     clean_tickers = [ticker.replace('.', '-') for ticker in tickers]
     
     return clean_tickers
+
+
+def create_candlestick_chart(
+    ticker_name: str,
+    period: Optional[str] = "1y",
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    in_jupyter: bool = False,
+) -> Union[Chart, JupyterChart, None]:
+    """Creates and configures an interactive candlestick chart for a given ticker.
+    
+    This function orchestrates fetching data, formatting it, and initializing
+    the lightweight-charts object with premium aesthetics. It does not display 
+    the chart automatically, allowing further customization by the caller.
+    
+    Args:
+        ticker_name (str): The stock ticker symbol (e.g., 'AAPL').
+        period (Optional[str]): The time period to fetch (e.g., '1y', '1mo'). Defaults to "1y".
+        start (Optional[str]): Start date in YYYY-MM-DD format.
+        end (Optional[str]): End date in YYYY-MM-DD format.
+        in_jupyter (bool): If True, returns a JupyterChart instead of a standard Chart.
+        
+    Returns:
+        Union[Chart, JupyterChart, None]: The configured chart object, or None if data fetching fails.
+    """
+    ticker = _init_ticker(ticker_name)
+    df_raw = _get_history(ticker, period=period, start=start, end=end)
+    
+    if df_raw.empty:
+        print(f"Cannot create chart for {ticker_name}: No data available.")
+        return None
+        
+    df_formatted = _format_for_lightweight_charts(df_raw)
+    
+    if df_formatted.empty:
+        print(f"Cannot create chart for {ticker_name}: Error formatting data.")
+        return None
+        
+    # Instantiate the correct Chart object based on the environment
+    chart = JupyterChart() if in_jupyter else Chart()
+    
+    # Premium visual customization
+    chart.layout(background_color='#131722', text_color='#d1d4dc')
+    chart.candle_style(
+        up_color='#26a69a', down_color='#ef5350',
+        border_up_color='#26a69a', border_down_color='#ef5350',
+        wick_up_color='#26a69a', wick_down_color='#ef5350'
+    )
+    chart.volume_config(scale_margin_top=0.8, scale_margin_bottom=0.0)
+    
+    # Set the formatted data
+    chart.set(df_formatted)
+    
+    return chart
