@@ -212,3 +212,50 @@ def create_candlestick_chart(
     chart.set(df_formatted)
     
     return chart
+
+
+def format_for_streamlit_charts(df: pd.DataFrame) -> list[dict]:
+    """Converts a yfinance DataFrame to the list-of-dicts format for streamlit-lightweight-charts.
+
+    Args:
+        df: Raw historical data from yfinance.
+
+    Returns:
+        A list of dictionaries, each with keys: time, open, high, low, close, volume.
+        Returns an empty list if the input is empty or invalid.
+    """
+    if df is None or df.empty:
+        return []
+
+    try:
+        formatted = df.copy().reset_index()
+
+        if isinstance(formatted.columns, pd.MultiIndex):
+            formatted.columns = formatted.columns.get_level_values(0)
+
+        formatted.columns = formatted.columns.str.lower()
+
+        time_col = next(
+            (col for col in ("date", "datetime") if col in formatted.columns),
+            None,
+        )
+        if time_col is None:
+            return []
+
+        formatted = formatted.rename(columns={time_col: "time"})
+        formatted["time"] = pd.to_datetime(formatted["time"]).dt.strftime("%Y-%m-%d")
+
+        desired_columns = ["time", "open", "high", "low", "close", "volume"]
+        available_columns = [c for c in desired_columns if c in formatted.columns]
+        records = formatted[available_columns].to_dict("records")
+
+        for record in records:
+            for key, value in record.items():
+                if key != "time":
+                    record[key] = float(value)
+
+        return records
+
+    except Exception as e:
+        print(f"Error formatting data for Streamlit charts: {e}")
+        return []
